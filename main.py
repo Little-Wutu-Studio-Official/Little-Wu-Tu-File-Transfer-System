@@ -2,7 +2,6 @@ import ctypes
 import os
 import shutil
 import subprocess
-import sys
 import threading
 import time
 import tkinter as tk
@@ -10,6 +9,8 @@ from tkinter import filedialog
 from tkinter import messagebox
 import random
 import ttkbootstrap as ttk
+import tkhtmlview
+import load
 
 
 def create_symlink(source, link_name):
@@ -59,7 +60,7 @@ if is_admin():
         while True:
             current_size = get_size(dest_path)
             progress = (current_size / start_size) * 100
-            progress_bar['value'] = progress
+            progress_bar['value'] = 1.5 * progress
             app.update_idletasks()
             if progress >= 100:
                 break
@@ -79,53 +80,81 @@ if is_admin():
 
 
     def start_move():
+        global runing
+        runing = True
         source = source_entry.get()
         folder_name = os.path.basename(source)
         destination = destination_entry.get()
 
         if not source or not destination:
             messagebox.showerror("错误", "请指定源路径和目标路径")
+            runing = False
             return
 
         start_size = get_size(source)
-        threading.Thread(target=move_folder, args=(source, destination, f"{destination}/{folder_name}"), daemon=True).start()
+        threading.Thread(target=move_folder, args=(source, destination, f"{destination}/{folder_name}"),
+                         daemon=True).start()
         threading.Thread(target=update_progress_bar, args=(start_size, f"{destination}/{folder_name}"),
                          daemon=True).start()
 
 
     def move_folder(source, destination, destined):
+        global runing
         try:
             shutil.move(source, destination)
             create_symlink(destined, source)
             messagebox.showinfo("完成", "文件夹移动完成")
+            runing = False
         except Exception as e:
             messagebox.showerror("错误", str(e))
+            runing = False
 
 
-    def closeWindow():
-        result = tk.messagebox.askyesno("请确定", "为了您的数据安全，如果您正在移动文件，请务必不要退出程序！！！")
-        if result:
-            app.destroy()
+    def closewindow():
+        global runing
+        if runing:
+            result = tk.messagebox.askyesno("请确定", "检测到您正在移动文件，请务必不要退出程序。")
+            if result:
+                app.destroy()
+            else:
+                pass
         else:
-            pass
+            app.destroy()
 
+
+    def about():
+        child_window = ttk.Toplevel(app)
+        html_label = tkhtmlview.HTMLText(child_window, html=tkhtmlview.RenderHTML('./html/about.html'))
+        html_label.pack(fill="both", expand=False)
+        html_label.fit_height()
+
+
+    runing = False
     tem = ["superhero", "vapor", "cyborg", "solar", "cosmo", "flatly", "journal", "litera", "minty", "pulse", "morph"]
     app = ttk.Window(themename=tem[random.randint(0, 10)])
-    app.protocol('WM_DELETE_WINDOW', closeWindow)
-    source_entry = ttk.Entry(app, width=32)
-    source_entry.pack()
-    ttk.Button(app, text="选择源文件夹", command=choose_source, bootstyle="outline", width=30).pack()
+    app.protocol('WM_DELETE_WINDOW', closewindow)
+    app.iconbitmap('icon.ico')
+    app.geometry('580x250')
+    app.resizable(False, False)
+    app.title('小於菟文件迁移系统')
+    ttk.Label(app, text="小於菟文件迁移系统", font=("楷体", 30)).grid(row=0, column=0, columnspan=2)
+    source_entry = ttk.Entry(app, width=28)
+    source_entry.grid(row=1, column=0)
+    ttk.Button(app, text="选择源文件夹", command=choose_source, bootstyle="outline", width=28).grid(row=1, column=1)
+    destination_entry = ttk.Entry(app, width=28)
+    destination_entry.grid(row=2, column=0)
+    ttk.Button(app, text="选择目标文件夹", command=choose_destination, bootstyle="outline", width=28).grid(row=2,
+                                                                                                           column=1)
 
-    destination_entry = ttk.Entry(app, width=32)
-    destination_entry.pack()
-    ttk.Button(app, text="选择目标文件夹", command=choose_destination, bootstyle="outline", width=30).pack()
+    ttk.Button(app, text="开始迁移并设置符号链接", command=start_move, bootstyle="outline", width=62).grid(row=3,
+                                                                                                           column=0,
+                                                                                                           columnspan=2)
 
-    ttk.Button(app, text="开始迁移并设置符号链接", command=start_move, bootstyle="outline", width=30).pack()
+    lf = (ttk.Labelframe(text="移动进度"))
+    lf.grid(row=5, column=0, columnspan=2)
 
-    progress_bar = ttk.Progressbar(app, mode='determinate', maximum=100, length=300, bootstyle="striped")
+    progress_bar = ttk.Progressbar(lf, mode='determinate', maximum=150, length=580, bootstyle="striped")
     progress_bar.pack()
 
+    ttk.Button(app, text="程序说明", command=about, bootstyle="outline", width=62).grid(row=4, column=0, columnspan=2)
     app.mainloop()
-
-else:
-    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
